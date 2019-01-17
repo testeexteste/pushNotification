@@ -1,0 +1,42 @@
+{
+  "project_info": {
+    "project_number": "436012889467",
+    "firebase_url": "https://pushteste-fbb19.firebaseio.com",
+    "project_id": "pushteste-fbb19",
+    "storage_bucket": "pushteste-fbb19.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:436012889467:android:5c33dc41f21e44d0",
+        "android_client_info": {
+          "package_name": "com.tiagogao"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "436012889467-qd9eonaaf3pifbv11qqhnkegf6jd8rrs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWNXZ_z9ebCElh9mpvogbU_6sE26V9Elk"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "ads_service": {
+          "status": 2
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
