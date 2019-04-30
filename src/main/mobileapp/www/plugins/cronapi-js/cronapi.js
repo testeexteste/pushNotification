@@ -611,7 +611,7 @@
 
     /**
      * @type function
-     * @name {getUserToken}}
+     * @name {{getUserToken}}
      * @nameTags token | auth | autenticaçào | armazenamento
      * @description {{getUserTokenDesc}}
      * @returns {ObjectType.STRING}
@@ -634,7 +634,7 @@
 
   /**
    * @type function
-   * @name {getSessionStorage}}
+   * @name {{getSessionStorage}}
    * @nameTags storage | session | sessão | armazenamento
    * @description {{getSessionStorageDesc}}
    * @param {ObjectType.STRING} key {{key}}
@@ -896,6 +896,40 @@
 
   /**
    * @type function
+   * @name {{firstRecordName}}
+   * @nameTags firstRecord
+   * @description {{firstRecordDescription}}
+   * @param {ObjectType.STRING} datasource {{firstRecordParam0}}
+   * @multilayer true
+   */
+
+  this.cronapi.screen.firstRecord = function(/** @type {ObjectType.OBJECT} @blockType datasource_from_screen*/ datasource) {
+    getDatasource(datasource).$apply( new function(){
+      var ds = getDatasource(datasource);
+      ds.cursor = -1;
+      ds.next();
+    } );
+  };
+
+  /**
+   * @type function
+   * @name {{lastRecordName}}
+   * @nameTags lastRecord
+   * @description {{lastRecordDescription}}
+   * @param {ObjectType.STRING} datasource {{lastRecordParam0}}
+   * @multilayer true
+   */
+
+  this.cronapi.screen.lastRecord = function(/** @type {ObjectType.OBJECT} @blockType datasource_from_screen*/ datasource) {
+    getDatasource(datasource).$apply( new function(){
+      var ds = getDatasource(datasource);
+      ds.cursor = ds.data.length-2;
+      ds.next();
+    } );
+  };
+
+  /**
+   * @type function
    * @name {{removeRecordName}}
    * @nameTags removeRecord
    * @description {{removeRecordDescription}}
@@ -1005,7 +1039,16 @@
         }
       }
 
+      var oldHash = window.location.hash;
       window.location.hash = view + (queryString?"?"+queryString:"");
+
+      var oldHashToCheck = oldHash + (oldHash.indexOf("?") > -1 ? "": "?");
+      var viewToCheck = view + (view.indexOf("?") > -1 ? "": "?");
+
+      if(oldHashToCheck.indexOf(viewToCheck) >= 0){
+        window.location.reload();
+      }
+
     }
     catch (e) {
       alert(e);
@@ -1308,7 +1351,11 @@
    * @multilayer true
    */
   this.cronapi.screen.disableComponent = function(/** @type {ObjectType.OBJECT} @blockType ids_from_screen*/ id) {
+    if($('#'+id).data("kendoComboBox")){
+      $('#'+id).data("kendoComboBox").enable(false);
+    }else{
     $.each( $('#'+id).find('*').addBack(), function(index, value){ $(value).prop('disabled',true); });
+    }
   };
 
   /**
@@ -1355,8 +1402,28 @@
     $('#'+id).attr(attrName , attrValue);
   };
 
-
-  /**
+    /**
+     * @type function
+     * @name {{changeContent}}
+     * @nameTags change|content|conteudo|moficiar
+     * @description {{changeContentDesc}}
+     * @param {ObjectType.STRING} id {{idsFromScreen}}
+     * @param {ObjectType.STRING} content {{content}}
+     * @param {ObjectType.BOOLEAN} compile {{compile}}
+     * @multilayer true
+     */
+    this.cronapi.screen.changeContent = function(/** @type {ObjectType.OBJECT} @blockType ids_from_screen*/ id , /** @type {ObjectType.STRING} */ content, /** @type {ObjectType.BOOLEAN} @blockType util_dropdown @keys false|true @values {{false}}|{{true}}*/ compile) {
+      $('#'+id).html(content);
+      if(compile === true || compile === 'true'){
+        var $injector = angular.injector(['ng']);
+        var that = this;
+        $injector.invoke(['$compile', function($compile) {
+          $compile(document.querySelector('#'+id))(that.cronapi.$scope);
+        }]);
+      }
+    };
+    
+    /**
    * @type function
    * @name {{logoutName}}
    * @nameTags logout
@@ -1382,6 +1449,32 @@
     }else
       this[datasource].search("", this[datasource].caseInsensitive);
   };
+
+
+
+    /**
+     * @type function
+     * @name {{loadMoreName}}
+     * @nameTags load|datasource|next|page
+     * @description {{loadMoreNameDescription}}
+     * @param {ObjectType.STRING} datasource {{datasource}}
+     */
+    this.cronapi.screen.loadMore = function(/** @type {ObjectType.OBJECT} @blockType datasource_from_screen*/ datasource) {
+        getDatasource(datasource).$apply( function() { getDatasource(datasource).nextPage();});
+    };
+
+
+    /**
+     * @type function
+     * @name {{hasNextPageName}}
+     * @nameTags load|datasource|next|page
+     * @description {hasNextPageDescription}}
+     * @param {ObjectType.STRING} datasource {{datasource}}
+     * @returns {ObjectType.BOOLEAN}
+     */
+    this.cronapi.screen.hasNextPage = function(/** @type {ObjectType.OBJECT} @blockType datasource_from_screen*/ datasource) {
+        return getDatasource(datasource).hasNextPage();
+    };
 
   /**
    * @category CategoryType.DATETIME
@@ -2165,89 +2258,106 @@
   };
 
   this.cronapi.internal.startCamera = function(field) {
-    var cameraContainer =   '<div class="camera-container" style="margin-left:-$marginleft$;margin-top:-$margintop$">\
-                                    <div class="btn btn-success button button-balanced" id="cronapiVideoCaptureOk" style="position: absolute; z-index: 999999999;">\
-                                        <span class="glyphicon glyphicon-ok icon ion-checkmark-round"></span>\
-                                    </div>\
-                                    <div class="btn btn-danger button button-assertive button-cancel-capture" id="cronapiVideoCaptureCancel" style="position: absolute; margin-left: 42px; z-index: 999999999;">\
-                                        <span class="glyphicon glyphicon-remove icon ion-android-close"></span>\
-                                    </div>\
-                                    <video id="cronapiVideoCapture" style="height: $height$; width: $width$;" autoplay=""></video>\
-                            </div>';
+    //verify if user is on Browser or not
+    if(window.cordova && window.cordova.platformId && window.cordova.platformId !== 'browser') {
+      // If in mobile devices use native camera cordova plugin
+      var that = this;
+      navigator.camera.getPicture(function (result) {
+        that.cronapi.screen.changeValueOfField(field, result);
+      }, function (error) {
+        console.error(error);
+        that.cronapi.$scope.Notification.error(message);
+      }, {
+        quality: 60, //Mobile images are very big to be stored into database, so reducing their quality (same as whatsapp images) improve performance and reduce db size
+        destinationType: Camera.DestinationType.DATA_URL,
+        encodingType: Camera.EncodingType.PNG,
+        correctOrientation: true
+      });
+    }else{
+      var cameraContainer =   '<div class="camera-container" style="margin-left:-$marginleft$;margin-top:-$margintop$">\
+                                      <div class="btn btn-success button button-balanced" id="cronapiVideoCaptureOk" style="position: absolute; z-index: 999999999;">\
+                                          <span class="glyphicon glyphicon-ok icon ion-checkmark-round"></span>\
+                                      </div>\
+                                      <div class="btn btn-danger button button-assertive button-cancel-capture" id="cronapiVideoCaptureCancel" style="position: absolute; margin-left: 42px; z-index: 999999999;">\
+                                          <span class="glyphicon glyphicon-remove icon ion-android-close"></span>\
+                                      </div>\
+                                      <video id="cronapiVideoCapture" style="height: $height$; width: $width$;" autoplay=""></video>\
+                              </div>';
 
 
-    function getMaxResolution(width, height) {
-      var maxWidth = window.innerWidth;
-      var maxHeight = window.innerHeight;
-      var ratio = 0;
+      function getMaxResolution(width, height) {
+        var maxWidth = window.innerWidth;
+        var maxHeight = window.innerHeight;
+        var ratio = 0;
 
-      ratio = maxWidth / width;
-      height = height * ratio;
-      width = width * ratio;
-
-      if(width > maxWidth){
         ratio = maxWidth / width;
         height = height * ratio;
         width = width * ratio;
-      }
 
-      if(height > maxHeight){
-        ratio = maxHeight / height;
-        width = width * ratio;
-        height = height * ratio;
-      }
-
-      return { width: width, height: height };
-    }
-
-    var streaming = null;
-    var mediaConfig =  { video: true };
-    var errBack = function(e) {
-      console.log('An error has occurred!', e)
-    };
-
-    if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia(mediaConfig).then(function(stream) {
-        streaming = stream;
-
-        var res = getMaxResolution(stream.getTracks()[0].getSettings().width, stream.getTracks()[0].getSettings().height);
-        var halfWidth = res.width;
-        var halfHeight = res.height;
-        try {
-          halfWidth = parseInt(halfWidth/2);
-          halfHeight = parseInt(halfHeight/2);
+        if(width > maxWidth){
+          ratio = maxWidth / width;
+          height = height * ratio;
+          width = width * ratio;
         }
-        catch (e) { }
 
-        cameraContainer =
-            cameraContainer
-            .split('$height$').join(res.height+'px')
-            .split('$width$').join(res.width+'px')
-            .split('$marginleft$').join(halfWidth+'px')
-            .split('$margintop$').join(halfHeight+'px')
-        ;
-        var cronapiVideoCapture = $(cameraContainer);
-        cronapiVideoCapture.prependTo("body");
-        var videoDOM = document.getElementById('cronapiVideoCapture');
+        if(height > maxHeight){
+          ratio = maxHeight / height;
+          width = width * ratio;
+          height = height * ratio;
+        }
 
-        cronapiVideoCapture.find('#cronapiVideoCaptureCancel').on('click',function() {
-          if (streaming!= null && streaming.getTracks().length > 0)
-            streaming.getTracks()[0].stop();
-          $(cronapiVideoCapture).remove();
+        return { width: width, height: height };
+      }
+
+      var streaming = null;
+      var mediaConfig =  { video: true };
+      var errBack = function(e) {
+        console.log('An error has occurred!', e)
+      };
+
+      if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia(mediaConfig).then(function(stream) {
+          streaming = stream;
+
+          var res = getMaxResolution(stream.getTracks()[0].getSettings().width, stream.getTracks()[0].getSettings().height);
+          var halfWidth = res.width;
+          var halfHeight = res.height;
+          try {
+            halfWidth = parseInt(halfWidth/2);
+            halfHeight = parseInt(halfHeight/2);
+          }
+          catch (e) { }
+
+          cameraContainer =
+              cameraContainer
+              .split('$height$').join(res.height+'px')
+              .split('$width$').join(res.width+'px')
+              .split('$marginleft$').join(halfWidth+'px')
+              .split('$margintop$').join(halfHeight+'px')
+          ;
+          var cronapiVideoCapture = $(cameraContainer);
+          cronapiVideoCapture.prependTo("body");
+          var videoDOM = document.getElementById('cronapiVideoCapture');
+
+          cronapiVideoCapture.find('#cronapiVideoCaptureCancel').on('click',function() {
+            if (streaming!= null && streaming.getTracks().length > 0)
+              streaming.getTracks()[0].stop();
+            $(cronapiVideoCapture).remove();
+          }.bind(this));
+
+          cronapiVideoCapture.find('#cronapiVideoCaptureOk').on('click',function() {
+            this.cronapi.internal.captureFromCamera(field, res.width, res.height);
+            if (streaming!= null && streaming.getTracks().length > 0)
+              streaming.getTracks()[0].stop();
+            $(cronapiVideoCapture).remove();
+          }.bind(this));
+
+          videoDOM.srcObject = stream;
+          videoDOM.onloadedmetadata = function(e) {
+            videoDOM.play();
+          };
         }.bind(this));
-
-        cronapiVideoCapture.find('#cronapiVideoCaptureOk').on('click',function() {
-          this.cronapi.internal.captureFromCamera(field, res.width, res.height);
-          if (streaming!= null && streaming.getTracks().length > 0)
-            streaming.getTracks()[0].stop();
-          $(cronapiVideoCapture).remove();
-        }.bind(this));
-
-        videoDOM.srcObject = stream;
-        videoDOM.onloadedmetadata = function(e) {
-          videoDOM.play();
-        };
-      }.bind(this));
+      }
     }
   };
 
@@ -2378,11 +2488,12 @@
         else if (data && this.cronapi.internal.isBase64(data)) {
           var fileName = 'download';
           var fileExtesion = this.cronapi.internal.getExtensionBase64(data);
+          var contentType = this.cronapi.internal.getContentTypeFromExtension(fileExtesion);
           fileName += fileExtesion;
           json = {};
           json.fileExtension = fileExtesion;
           json.name = fileName;
-          json.contentType = 'unknown';
+          json.contentType = contentType;
         }
       }
     }
@@ -2394,6 +2505,35 @@
       result += "<b>Content-Type:</b> <br/>" + json.contentType +"<br/>";
       result += "<b>Extensão:</b> <br/>" + json.fileExtension +"<br/>";
       return result;
+    }
+  };
+
+  this.cronapi.internal.getContentTypeFromExtension = function(extension) {
+    if (extension) {
+      switch (extension.toLowerCase()) {
+        case '.png':
+          return 'image/png';
+        case '.jpg':
+          return 'image/jpeg';
+        case '.mp4':
+          return 'video/mp4';
+        case '.pdf':
+          return 'application/pdf';
+        case '.ico':
+          return 'image/vnd.microsoft.icon';
+        case '.rar':
+          return 'application/x-rar-compressed';
+        case '.rtf':
+          return 'application/rtf';
+        case '.txt':
+          return 'text/plain';
+        case '.zip':
+          return 'application/zip';
+        case '.srt':
+          return 'text/srt';
+        default:
+          return 'unknown';
+      }
     }
   };
 
@@ -2728,6 +2868,101 @@
   };
 
   /**
+   * @type function
+   * @name {{createNewObject}}
+   * @nameTags createNewObject
+   * @description {{functionToCreateNewObject}}
+   * @arbitraryParams true
+   * @wizard procedures_createnewobject_callreturn
+   * @returns {ObjectType.OBJECT}
+   */
+  this.cronapi.object.newObject = function() {
+    var result = {};
+
+    if (arguments && arguments.length > 0) {
+      for (var i = 0; i < arguments.length; i++) {
+        var param = arguments[i];
+        if (param.name)
+          result[param.name] = param.value;
+      }
+    }
+    return result;
+  };
+
+  /**
+   * @type function
+   * @name {{getObjectField}}
+   * @nameTags getObjectField
+   * @description {{functionToGetObjectField}}
+   * @param {ObjectType.OBJECT} obj {{obj}}
+   * @param {ObjectType.STRING} field {{field}}
+   * @wizard procedures_get_field
+   */
+  this.cronapi.object.getObjectField = function(/** @type {ObjectType.OBJECT} @blockType variables_get */ obj, /** @type {ObjectType.STRING} @blockType procedures_get_field_object */ field) {
+    var result = undefined;
+    if (obj && field)
+      result = obj[field];
+    return result;
+  };
+
+  /**
+   * @category CategoryType.JSON
+   * @categoryTags JSON|json
+   */
+  this.cronapi.json = {};
+
+  /**
+   * @type function
+   * @name {{createObjectJson}}
+   * @description {{createObjectJsonDescription}}
+   * @nameTags object
+   * @param {ObjectType.STRING} string {{string}}
+   * @returns {ObjectType.OBJECT}
+   */
+  this.cronapi.json.createObjectFromString = function(string) {
+    return this.cronapi.object.createObjectFromString(string);
+  };
+
+  /**
+   * @type function
+   * @name {{setProperty}}
+   * @nameTags setProperty
+   * @param {ObjectType.OBJECT} object {{json}}
+   * @param {ObjectType.STRING} property {{property}}
+   * @param {ObjectType.OBJECT} value {{value}}
+   * @description {{setPropertyDescription}}
+   * @returns {ObjectType.VOID}
+   */
+  this.cronapi.json.setProperty = function(object, property, value) {
+    this.cronapi.object.setProperty(object, property, value)
+  };
+
+  /**
+   * @type function
+   * @name {{deleteProperty}}
+   * @description {{deletePropertyDescription}}
+   * @nameTags object
+   * @param {ObjectType.OBJECT} object {{json}}
+   * @param {ObjectType.STRING} key {{key}}
+   */
+  this.cronapi.json.deleteProperty = function(obj, key) {
+    this.cronapi.object.deleteProperty(obj, key);
+  };
+
+  /**
+   * @type function
+   * @name {{getProperty}}
+   * @nameTags getProperty
+   * @param {ObjectType.OBJECT} object {{json}}
+   * @param {ObjectType.STRING} property {{property}}
+   * @description {{getPropertyDescription}}
+   * @returns {ObjectType.OBJECT}
+   */
+  this.cronapi.json.getProperty = function(object, property) {
+    return this.cronapi.object.getProperty(object, property);
+  };
+
+  /**
    * @category CategoryType.DEVICE
    * @categoryTags CORDOVA|cordova|Dispositivos|device|Device
    */
@@ -2854,9 +3089,10 @@
    * @returns {ObjectType.VOID}
    */
 
-  this.cronapi.cordova.camera.getPicture = function(/** @type {ObjectType.STATEMENTSENDER} @description {{success}} */ success, /** @type {ObjectType.STATEMENTSENDER} @description {{error}} */  error, /** @type {ObjectType.LONG} @description {{destinationType}} @blockType util_dropdown @keys 0|1|2 @values DATA_URL|FILE_URI|NATIVE_URI  */  destinationType, /** @type {ObjectType.LONG} @description {{pictureSourceType}} @blockType util_dropdown @keys 0|1|2 @values PHOTOLIBRARY|CAMERA|SAVEDPHOTOALBUM  */ pictureSourceType, /** @type {ObjectType.LONG} @description {{mediaType}} @blockType util_dropdown @keys 0|1|2 @values PICTURE|VIDEO|ALLMEDIA  */ mediaType) {
+  this.cronapi.cordova.camera.getPicture = function(/** @type {ObjectType.STATEMENTSENDER} @description {{success}} */ success, /** @type {ObjectType.STATEMENTSENDER} @description {{error}} */  error, /** @type {ObjectType.LONG} @description {{destinationType}} @blockType util_dropdown @keys 0|1|2 @values DATA_URL|FILE_URI|NATIVE_URI  */  destinationType, /** @type {ObjectType.LONG} @description {{pictureSourceType}} @blockType util_dropdown @keys 0|1|2 @values PHOTOLIBRARY|CAMERA|SAVEDPHOTOALBUM  */ pictureSourceType, /** @type {ObjectType.LONG} @description {{mediaType}} @blockType util_dropdown @keys 0|1|2 @values PICTURE|VIDEO|ALLMEDIA  */ mediaType, /** @type {ObjectType.BOOLEAN} @description {{allowEdit}} @blockType util_dropdown @keys false|true @values {{false}}|{{true}}  */ allowEdit) {
     if(mediaType === undefined || mediaType === null) mediaType = 0 ;
-    navigator.camera.getPicture(success, error, { destinationType: destinationType , sourceType : pictureSourceType , mediaType: mediaType });
+    allowEdit = (allowEdit === true || allowEdit === 'true');
+    navigator.camera.getPicture(success, error, { destinationType: destinationType , sourceType : pictureSourceType , mediaType: mediaType , allowEdit: allowEdit});
   };
 
   /**
@@ -3569,5 +3805,93 @@
     if(Array.isArray(options)){   dataset.options = options;} else  dataset.options = JSON.parse(options);
     return dataset;
   }
+
+
+
+  /**
+   * @category CategoryType.SOCIAL
+   * @categoryTags login|social|network|facebook|github|google|linkedin
+   */
+  this.cronapi.social = {};
+
+
+  this.cronapi.social.gup = function(name,url){
+      if (!url) url = location.href;
+      name = name.replace(/[\[]/,"\\\[").replace(/[\]]/,"\\\]");
+      var regexS = "[\\?&]"+name+"=([^&#]*)";
+      var regex = new RegExp( regexS );
+      var results = regex.exec( url );
+      return results == null ? null : results[1];
+  }
+
+  this.cronapi.social.login = function(login,password,options){
+      var item;
+      this.cronapi.screen.showLoading();
+      if (!this.cronapi.logic.isNullOrEmpty(this.cronapi.screen.getHostapp())) {
+          this.cronapi.util.getURLFromOthers('POST', 'application/x-www-form-urlencoded', String(this.cronapi.screen.getHostapp()) + String('auth'), this.cronapi.object.createObjectFromString(['{ \"username\": \"',login,'\" , \"password\": \"',password,'\" } '].join('')), this.cronapi.object.createObjectFromString(['{ \"X-AUTH-TOKEN\": \"',options,'\" } '].join('')), function(sender_item) {
+              item = sender_item;
+              this.cronapi.screen.hide();
+              this.cronapi.util.setLocalStorage('_u', this.cronapi.object.serializeObject(item));
+              this.cronapi.screen.changeView("#/app/logged/home",[  ]);
+          }.bind(this), function(sender_item) {
+              item = sender_item;
+              if (this.cronapi.object.getProperty(item, 'status') == '403' || this.cronapi.object.getProperty(item, 'status') == '401') {
+                  this.cronapi.screen.notify('error',this.cronapi.i18n.translate("LoginViewInvalidpassword",[  ]));
+              } else {
+                  this.cronapi.screen.notify('error',this.cronapi.object.getProperty(item, 'responseJSON.message'));
+              }
+              this.cronapi.screen.hide();
+          }.bind(this));
+      } else {
+          this.cronapi.screen.hide();
+          this.cronapi.screen.notify('error','HostApp is Required');
+      }
+  }
+
+  /**
+   * @type function
+   * @name Login With Facebook
+   * @nameTags login|social|network|facebook|github|google|linkedin
+   * @description {{createSerieDescription}}
+   * @param {ObjectType.STRING} socialNetwork {{socialNetwork}}
+   * @returns {ObjectType.VOID}
+   */
+  this.cronapi.social.sociaLogin = function(/** @type {ObjectType.STRING} @description socialNetwork @blockType util_dropdown @keys facebook|github|google|linkedin @values facebook|github|google|linkedin  */ socialNetwork) {
+      var that = this;
+      var u = window.hostApp+"signin/"+socialNetwork+"/";
+      if(cordova.InAppBrowser){
+          var cref = cordova.InAppBrowser.open(u, '_blank', 'location=no');
+          cref.addEventListener('loadstart', function(event) {
+              if (event.url.indexOf("_ctk") > -1) {
+                  cref.close();
+                  that.cronapi.social.login.bind(that)('#OAUTH#', '#OAUTH#', that.cronapi.social.gup('_ctk',event.url));
+              }
+          });
+      }else{
+          //TODO LOGIN ON WEB
+      }
+  }
+
+  /**
+   * @type function
+   * @name {{getSelectedRowsGrid}}
+   * @nameTags getSelectedRowsGrid|Obter linhas selecionadas da grade
+   * @description {{functionToGetSelectedRowsGrid}}
+   * @param {ObjectType.STRING} field {{field}}
+   * @returns {ObjectType.OBJECT}
+   */
+  this.cronapi.screen.getSelectedRowsGrid = function(/** @type {ObjectType.STRING} @blockType field_from_screen*/ field) {
+    var result = [];
+    var grid = $('[ng-model="'+ field  +'"]').children().data('kendoGrid');
+    if (grid) {
+      var selected = grid.select();
+      selected.each(function() {
+        var dataItem = grid.dataItem(this);
+        result.push(dataItem);
+      });
+    }
+    return result;
+  };
+
 
 }).bind(window)();

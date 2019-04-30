@@ -43,6 +43,16 @@
             app.registerEventsCronapi($scope, $translate,$ionicModal, $ionicLoading);
             $rootScope.http = $http;
             $scope.Notification = Notification;
+            // save state params into scope
+            $scope.params = $stateParams;
+
+            // Query string params
+            var queryStringParams = $location.search();
+            for (var key in queryStringParams) {
+              if (queryStringParams.hasOwnProperty(key)) {
+                $scope.params[key] = queryStringParams[key];
+              }
+            }
 
             for(var x in app.userEvents)
                 $scope[x]= app.userEvents[x].bind($scope);
@@ -133,11 +143,24 @@
         '$ionicHistory',
         '$ionicModal',
         '$ionicLoading',
-        function($scope, $http, $rootScope, $state, $timeout, $translate, Notification, $ionicHistory, $ionicModal, $ionicLoading) {
+        '$stateParams',
+        '$location',
+        function($scope, $http, $rootScope, $state, $timeout, $translate, Notification, $ionicHistory, $ionicModal, $ionicLoading, $stateParams, $location) {
 
             app.registerEventsCronapi($scope, $translate,$ionicModal,$ionicLoading);
             $rootScope.http = $http;
             $scope.Notification = Notification;
+
+            // save state params into scope
+            $scope.params = $stateParams;
+
+            // Query string params
+            var queryStringParams = $location.search();
+            for (var key in queryStringParams) {
+                if (queryStringParams.hasOwnProperty(key)) {
+                  $scope.params[key] = queryStringParams[key];
+                }
+              }
 
             for(var x in app.userEvents)
                 $scope[x]= app.userEvents[x].bind($scope);
@@ -203,7 +226,17 @@
                 });
 
                 $scope.openChangePassword = function() {
-                    $scope.modal.show();
+                    if($scope.modal.modelEl){
+                        $scope.modal.show();
+                    }else{
+                        $http({url:'views/logged/_changepassword.view.html'}).then(function(data){
+                            $scope.modal = $ionicModal.fromTemplate($(data.data).last().text(), {
+                                scope: $scope,
+                                animation: 'slide-in-up'
+                            });
+                            $scope.modal.show();
+                        });
+                    }
                 };
 
                 $scope.closeChangePassword = function() {
@@ -224,6 +257,9 @@
             }).then(function onsuccess(response){
                 if($(response.data).find("ion-nav-bar").length > 0){
                     $scope.isOldMenu = true;
+                      if($(document).find("ion-header-bar").length > 0){
+                        $(document).find("ion-nav-bar").show();
+                      }
                 }else{
                     $scope.isOldMenu = false;
                 }
@@ -247,7 +283,15 @@
         "$translate",
         "$ionicModal",
         "$ionicLoading",
-        function($scope, $stateParams, $http, Notification, $location, $rootScope, $translate, $ionicModal, $ionicLoading) {
+        "$ionicPlatform",
+        function($scope, $stateParams, $http, Notification, $location, $rootScope, $translate, $ionicModal, $ionicLoading,$ionicPlatform) {
+
+            $ionicPlatform.registerBackButtonAction(function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                navigator.app.exitApp();
+            },101);
+
 
             app.registerEventsCronapi($scope, $translate, $ionicModal, $ionicLoading);
             $rootScope.http = $http;
@@ -352,6 +396,8 @@
                 }
             }
 
+            $rootScope.session = (localStorage.getItem('_u') != undefined) ? JSON.parse(localStorage.getItem('_u')) : null;
+
             //Components personalization jquery
             $scope.registerComponentScripts = function() {
                 //carousel slider
@@ -363,6 +409,23 @@
             }
 
             $scope.registerComponentScripts();
+
+            if ($scope.isOldMenu) {
+                var name = $scope.params.name ||'home';
+                $scope.http({
+                  method: 'GET',
+                  url: 'views/logged/' + name + '.view.html'
+                }).then(function onsuccess(response) {
+                  if ($(response.data).find("ion-header-bar").length > 0) {
+                    $(document).find("ion-nav-bar").hide();
+                  }
+                  else {
+                    if ($(document).find("ion-header-bar").length > 0) {
+                      $(document).find("ion-nav-bar").show();
+                    }
+                  }
+                });
+            }
 
             try {
                 var contextAfterPageController = $controller('AfterPageController', { $scope: $scope });
@@ -381,7 +444,14 @@
         "$translate",
         "$ionicModal",
         "$ionicLoading",
-        function($scope, $stateParams, $http, Notification, $location, $rootScope, $translate, $ionicModal, $ionicLoading) {
+        "$ionicPlatform",
+        function($scope, $stateParams, $http, Notification, $location, $rootScope, $translate, $ionicModal, $ionicLoading,$ionicPlatform) {
+
+            $ionicPlatform.registerBackButtonAction(function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                navigator.app.exitApp();
+            },101);
 
             app.registerEventsCronapi($scope, $translate, $ionicModal, $ionicLoading);
             $rootScope.http = $http;

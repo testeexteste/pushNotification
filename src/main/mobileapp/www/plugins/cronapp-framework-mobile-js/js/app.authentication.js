@@ -49,6 +49,18 @@ var app = (function() {
                     // org.apache.cordova.statusbar required
                     StatusBar.styleDefault();
                 }
+
+              // Fix for iPhone X/XS screen rotation issue
+              // https://stackoverflow.com/questions/53290178/cordova-iphone-x-safe-area-after-layout-orientation-changes
+              if(ionic.Platform.is('ios')){
+                window.addEventListener("orientationchange", function() {
+                  var originalMarginTop = document.body.style.marginTop;
+                  document.body.style.marginTop = "1px";
+                  setTimeout(function () {
+                    document.body.style.marginTop = originalMarginTop;
+                  }, 100);
+                }, false);
+              }
             });
         })
         .config([
@@ -101,7 +113,8 @@ var app = (function() {
                         controller: 'InitialController',
                         templateUrl: function (urlattr) {
                             if(navigator.app){
-                                navigator.app.exitApp();
+                                // The code bellow is causing force close on devices running chromium WebView
+                                // navigator.app.exitApp();
                             }
                             return '';
                         }
@@ -158,6 +171,11 @@ var app = (function() {
                                 controller: 'PageController',
                                 templateUrl: 'views/logged/home.view.html'
                             }
+                        },
+                        resolve: {
+                          data: function ($translate) {
+                            $translate.refresh();
+                          }
                         }
                     })
 
@@ -200,22 +218,17 @@ var app = (function() {
 
             $translateProvider.useMissingTranslationHandlerLog();
 
-            $translateProvider.useStaticFilesLoader({
-                prefix: 'i18n/locale_',
-                suffix: '.json'
-            });
-
-            $translateProvider.useStaticFilesLoader({
-                files: [
-                  {
-                    prefix: 'plugins/cronapp-framework-js/i18n/locale_',
-                    suffix: '.json'
-                  }]
-            });
-
             $translateProvider.useLoader('customTranslateLoader', {
-                prefix: 'i18n/locale_',
-                suffix: '.json'
+                files: [
+                    {
+                      prefix: 'i18n/locale_',
+                      suffix: '.json'
+                    },
+                    {
+                        prefix: 'plugins/cronapp-framework-mobile-js/i18n/locale_',
+                        suffix: '.json'
+                    }
+                ]
             });
 
             var locale = (window.navigator.userLanguage || window.navigator.language || 'pt_br').replace('-', '_');
@@ -284,7 +297,9 @@ var app = (function() {
                     var requestObj = arguments[5];
                     if (requestObj.status === 404 || requestObj.status === 403) {
                         localStorage.removeItem('_u');
-                        $state.go('login');
+                        $state.go('login').catch(function(){
+                            $state.go('404');
+                        });
                     }
                 } else {
                     $state.go('404');
@@ -347,6 +362,7 @@ app.registerEventsCronapi = function($scope, $translate, $ionicModal, $ionicLoad
         $scope[x] = app.userEvents[x].bind($scope);
 
     $scope.vars = {};
+    $scope.$evt = $evt;
 
     try {
         if (cronapi) {
@@ -405,8 +421,8 @@ app.factory('customTranslateLoader', function ($http, $q) {
         params: ''
       }, options.$http)).success(function (data) {
         deferred.resolve(data);
-      }).error(function (data) {
-        deferred.reject(options.key);
+      }).error(function () {
+        deferred.resolve({});
       });
 
       return deferred.promise;
@@ -425,7 +441,6 @@ app.factory('customTranslateLoader', function ($http, $q) {
     }
 
     $q.all(promises).then(function (data) {
-      data = [data[0]];
       var length = data.length,
           mergedData = {};
 

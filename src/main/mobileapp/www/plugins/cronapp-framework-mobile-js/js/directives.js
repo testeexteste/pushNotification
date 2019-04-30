@@ -105,6 +105,21 @@ window.addEventListener('message', function(event) {
             };
         })
 
+        .directive('screenParams', [function() {
+            'use strict';
+            return {
+                link: function(scope, elem, attrs, ctrl) {
+                    var screenParams = eval(attrs.screenParams);
+                    if (screenParams && screenParams.length) {
+                        screenParams.forEach(function(screenParam) {
+                            if (scope.params && !scope.params[screenParam.key])
+                                scope.params[screenParam.key] = screenParam.value || '';
+                        });
+                    }
+                }
+            }
+        }])
+
         .directive('mask', maskDirectiveMask)
 
         .directive('dynamicImage', function($compile) {
@@ -114,7 +129,6 @@ window.addEventListener('message', function(event) {
                 scope: true,
                 require: 'ngModel',
                 link: function(scope, element, attr) {
-                    debugger;
                     var required = (attr.ngRequired && attr.ngRequired == "true"?"required":"");
                     var content = element.html();
                     var templateDyn    =
@@ -307,7 +321,6 @@ window.addEventListener('message', function(event) {
                     var render = function(canvas, value, typeNumber, correction, size, inputMode){
                         var trim = /^\s+|\s+$/g;
                         var text = value.replace(trim, '');
-                        debugger;
                         var qr = new QRCode(typeNumber, correction, inputMode);
                         qr.addData(text);
                         qr.make();
@@ -524,33 +537,33 @@ window.addEventListener('message', function(event) {
                     if (this.length > 0) {
                         if (filterTemplate != "") {
                             if (isOData) {
-                                filterTemplate += " and ";
+                                filterTemplate += " or ";
                             } else {
                                 filterTemplate += ";";
                             }
                         }
 
                         if (isOData) {
-                            if (operator == "=" && typeElement == 'text') {
-                                filterTemplate = "startswith(tolower("+this+"), {value.lower})";
+                            if (operator == "=" && typeElement == 'text' && filterTemplate == "") {
+                                filterTemplate = "substringof({value.lower}, tolower("+this+"))";
                             }
                             else if (operator == "=") {
-                                filterTemplate = this + " eq {value}";
+                                filterTemplate += " substringof({value.lower},tolower("+this+"))";
                             }
                             else if (operator == "!=") {
-                                filterTemplate = this + " ne {value}";
+                                filterTemplate += this + " ne {value}";
                             }
                             else if (operator == ">") {
-                                filterTemplate = this + " gt {value}";
+                                filterTemplate += this + " gt {value}";
                             }
                             else if (operator == ">=") {
-                                filterTemplate = this + " ge {value}";
+                                filterTemplate += this + " ge {value}";
                             }
                             else if (operator == "<") {
-                                filterTemplate = this + " lt {value}";
+                                filterTemplate += this + " lt {value}";
                             }
                             else if (operator == "<=") {
-                                filterTemplate = this + " le {value}";
+                                filterTemplate += this + " le {value}";
                             }
                         } else {
                             if (typeElement == 'text') {
@@ -852,7 +865,11 @@ window.addEventListener('message', function(event) {
             }
 
             var addImage = function(column) {
-                return '<img data-ng-src="data:image/png;base64,{{rowData.' + column.field + '}}">';
+                return '<div class="custom-item-avatar-imagem" style="background-image:url(\'data:image/png;base64,{{rowData.' + column.field + '}}\')"></div>';
+            }
+
+            var addImageLink = function(column) {
+                return '<div class="custom-item-avatar-imagem" style="background-image:url(\'{{rowData.' + column.field + '}}\')"></div>';
             }
 
             var encodeHTML = function(value) {
@@ -913,7 +930,7 @@ window.addEventListener('message', function(event) {
             }
 
             var addCustomButton = function(column) {
-                return '<ion-option-button class="button-dark" ng-click="listButtonClick($index, rowData, \''+window.stringToJs(column.execute)+'\', $event)"><i class="icon ion-navigate"></i></ion-option-button>';
+                return `<ion-option-button class="button-dark" ng-click="listButtonClick($index, rowData, '${window.stringToJs(column.execute)}', $event)"><i class=" ${column.iconClass}"></i> ${column.label}</ion-option-button> `
             }
 
             var isImage = function(fieldName, schemaFields) {
@@ -927,8 +944,6 @@ window.addEventListener('message', function(event) {
                 return false;
             }
 
-
-
             var getSearchableList = function(dataSourceName, fieldName) {
                 return '\
               <label class="item item-input"> <i class="icon ion-search placeholder-icon"></i> \
@@ -941,8 +956,6 @@ window.addEventListener('message', function(event) {
             return {
                 restrict: 'E',
                 link: function(scope, element, attrs, ngModelCtrl) {
-
-
 
                     var optionsList = {};
                     var dataSourceName = '';
@@ -980,7 +993,6 @@ window.addEventListener('message', function(event) {
                             event.stopPropagation();
                         }
 
-
                         var searchableField = null;
                         var isNativeEdit = false;
                         var addedImage = false;
@@ -991,6 +1003,9 @@ window.addEventListener('message', function(event) {
                                     if (!addedImage && isImage(column.field, optionsList.dataSourceScreen.entityDataSource.schemaFields)) {
                                         image = addImage(column);
                                         addedImage = true;
+                                    } else if (!addedImage && (column.type == 'image')) {
+                                        image = addImageLink(column);
+                                        addedImage = true;                                    
                                     } else {
                                         content = content.concat(addDefaultColumn(column, (i == 0)));
                                         if (column.filterable) {
@@ -1025,19 +1040,27 @@ window.addEventListener('message', function(event) {
                     var ionItem = $(element).find('ion-item');
                     ionItem.attr('ng-repeat', getExpression(dataSourceName));
 
-                    if (isNativeEdit && !attrs.ngClick) {
+                    if (isNativeEdit) {
                         ionItem.attr('ng-click', getEditCommand(dataSourceName));
                     }
-                    else if(attrs.ngClick){
-                        ionItem.attr('ng-click', "listButtonClick($index, rowData, \'"+window.stringToJs(attrs.ngClick)+"\', $event)");
+
+                    if(attrs.ngClick){
+                      ionItem.attr('ng-click', "listButtonClick($index, rowData, \'"+window.stringToJs(attrs.ngClick)+"\', $event)");
                     }
 
-                    $(element).removeAttr('ng-click');
+                    const attrsExcludeds = ['options','ng-repeat','ng-click'];
+                    const filteredItems = Object.values(attrs.$attr).filter(function(item) {
+                      return !attrsExcludeds.includes(item);
+                    })
+                    for( let o in filteredItems){
+                      ionItem.attr(filteredItems[o], attrs[o]);
+                    }
 
-                    var ionAvatar = $(element).find('.item-avatar');
-                    ionAvatar.append(image);
-                    ionAvatar.append(content);
-                    ionAvatar.append(buttons);
+                    content = '<div class="item-list-detail">' + content + '<\div>';
+                      var ionAvatar = $(element).find('.item-avatar');
+                      ionAvatar.append(image);
+                      ionAvatar.append(content);
+                      ionAvatar.append(buttons);
 
                     scope.nextPageInfinite = function() {
                         dataSource.nextPage();
@@ -1047,8 +1070,6 @@ window.addEventListener('message', function(event) {
                     var infiniteScroll = $(element).find('ion-infinite-scroll');
                     infiniteScroll.attr('on-infinite', 'nextPageInfinite()');
                     infiniteScroll.attr('distance', '1%');
-
-
 
                     $compile(templateDyn)(scope);
                 }
@@ -1236,7 +1257,7 @@ function maskDirective($compile, $translate, attrName) {
                     });
                 }
 
-            } else if (type == 'number' || type == 'money' || type == 'integer') {
+            } else if (type == 'number' || type == 'money' || type == 'integer' || type == 'money-decimal') {
                 removeMask = true;
                 textMask = false;
 
@@ -1249,11 +1270,10 @@ function maskDirective($compile, $translate, attrName) {
                 var precision = 0;
 
                 if (mask.startsWith(currency)) {
-                    prefix = currency;
+                  prefix = currency;
                 }
-
                 else if (mask.endsWith(currency)) {
-                    suffix = currency;
+                  suffix = currency;
                 }
 
                 var pureMask = mask.trim().replace(prefix, '').replace(suffix, '').trim();
@@ -1287,14 +1307,19 @@ function maskDirective($compile, $translate, attrName) {
                 if (precision == 0)
                     inputmaskType = 'integer';
 
+                if(type == 'money-decimal'){
+                  inputmaskType = 'currency';
+                }
+
                 var ipOptions = {
-                    'rightAlign':  (type == 'money'),
-                    'unmaskAsNumber': true,
-                    'allowMinus': true,
-                    'prefix': prefix,
-                    'suffix': suffix,
-                    'radixPoint': decimal,
-                    'digits': precision
+                  'rightAlign':  (type == 'money' || type == 'money-decimal'),
+                  'unmaskAsNumber': true,
+                  'allowMinus': true,
+                  'prefix': prefix,
+                  'suffix': suffix,
+                  'radixPoint': decimal,
+                  'digits': precision,
+                  'numericInput' :  (type == 'money-decimal')
                 };
 
                 if (thousands) {
@@ -1313,15 +1338,15 @@ function maskDirective($compile, $translate, attrName) {
                 });
                 if (ngModelCtrl) {
                     ngModelCtrl.$formatters.push(function (value) {
-                        if (value != undefined && value != null && value != '') {
+                        if (value != undefined && value != null && value !== '') {
                             return format(mask, value);
                         }
                         return null;
                     });
                     ngModelCtrl.$parsers.push(function (value) {
-                        if (value != undefined && value != null && value != '') {
+                        if (value != undefined && value != null && value !== '') {
                             var unmaskedvalue = $element.inputmask('unmaskedvalue');
-                            if (unmaskedvalue != '')
+                            if (unmaskedvalue !== '')
                                 return unmaskedvalue;
                         }
                         return null;
@@ -1395,7 +1420,7 @@ function parseMaskType(type, $translate) {
             type = '0,00'
     }
 
-    else if (type == "money") {
+    else if (type == "money" || type == "money-decimal") {
         type = $translate.instant('Format.Money');
         if (type == 'Format.Money')
             type = '#.#00,00'

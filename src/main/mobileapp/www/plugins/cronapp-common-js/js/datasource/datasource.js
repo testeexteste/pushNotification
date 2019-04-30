@@ -156,13 +156,17 @@ angular.module('datasourcejs', [])
           delete cloneObject.__fromMemory;
 
           // Get an ajax promise
-          this.$promise = $http({
+          this.$promise = _self.getService(verb)({
             method: verb,
             url: _self.removeSlash(((window.hostApp || "") + url)),
             data: (object) ? JSON.stringify(cloneObject) : null,
-            headers: _self.headers
+            headers: _self.headers,
+            rawData: (object) ? cloneObject : null
           }).success(function(data, status, headers, config) {
             _self.busy = false;
+            if(_self.$scope.$ionicLoading) {
+              _self.$scope.$ionicLoading.hide();
+            }
             if (_callback) {
               if (_self.isOData()) {
                 if (data.d != null && data.d.result != null) {
@@ -189,6 +193,9 @@ angular.module('datasourcejs', [])
             }
           }).error(function(data, status, headers, config) {
             _self.busy = false;
+            if(_self.$scope.$ionicLoading) {
+              _self.$scope.$ionicLoading.hide();
+            }
             var msg;
             if (_self.isOData()) {
               msg = data.error.message.value;
@@ -202,6 +209,21 @@ angular.module('datasourcejs', [])
           });
 
           this.$promise.then = function(callback) {
+            if(_self.$scope.$ionicLoading) {
+              var data = (object) ? cloneObject : null;
+              for (var key in data) {
+                if (_self.$scope.cronapi.internal.isBase64(data[key])) {
+                  _self.$scope.$ionicLoading.show({
+                    content: 'Loading',
+                    animation: 'fade-in',
+                    showBackdrop: true,
+                    maxWidth: 200,
+                    showDelay: 0
+                  });
+                  break;
+                }
+              }
+            }
             _callback = callback;
             return this;
           }
@@ -212,6 +234,56 @@ angular.module('datasourcejs', [])
           }
           return this;
         }
+      }
+
+      this.getService = function(verb) {
+        var event = eval("this.on"+verb);
+
+        if (event) {
+          return function(properties) {
+            var promise = {
+              properties: properties,
+              successCallback: null,
+              errorCallback: null,
+              success: function(successCallback) {
+                this.successCallback = successCallback;
+                return this;
+              },
+
+              error: function(errorCallback) {
+                this.errorCallback = errorCallback;
+                return this;
+              }
+            };
+
+            $timeout(function() {
+              var contextVars = {
+                'currentData': this.properties.rawData||this.properties.data,
+                'filter': this.properties.filter||"",
+                'datasource': _self,
+                'selectedIndex': _self.cursor,
+                'index': _self.cursor,
+                'selectedRow': _self.active,
+                'item': _self.active,
+                'selectedKeys': _self.getKeyValues(_self.active, true),
+                'selectedKey': _self.getFirstKeyValue(_self.active, true),
+                'callback': this.successCallback
+              };
+
+              var result = _self.$scope.$eval(event, contextVars);
+
+              if (result) {
+                this.successCallback(result);
+              }
+
+            }.bind(promise),0);
+
+            return promise;
+          }
+
+        }
+
+        return $http;
       }
 
       /**
@@ -232,7 +304,7 @@ angular.module('datasourcejs', [])
         return "[Datasource]"
       }
 
-      this.handleAfterCallBack = function(callBackFunction) {
+      this.handleAfterCallBack = function(callBackFunction, callback) {
         if (callBackFunction) {
           try {
 
@@ -243,7 +315,9 @@ angular.module('datasourcejs', [])
               'index': this.cursor,
               'selectedRow': this.active,
               'item': this.active,
-              'selectedKeys': this.getKeyValues(this.active, true)
+              'selectedKeys': this.getKeyValues(this.active, true),
+              'selectedKey': this.getFirstKeyValue(_self.active, true),
+              'callback': callback
             };
 
             this.$scope.$eval(callBackFunction, contextVars);
@@ -253,7 +327,7 @@ angular.module('datasourcejs', [])
         }
       }
 
-      this.handleBeforeCallBack = function(callBackFunction) {
+      this.handleBeforeCallBack = function(callBackFunction, callback) {
         var isValid = true;
         if (callBackFunction) {
           try {
@@ -264,7 +338,9 @@ angular.module('datasourcejs', [])
               'index': this.cursor,
               'selectedRow': this.active,
               'item': this.active,
-              'selectedKeys': this.getKeyValues(this.active, true)
+              'selectedKeys': this.getKeyValues(this.active, true),
+              'selectedKey': this.getFirstKeyValue(_self.active, true),
+              'callback': callback
             };
 
             this.$scope.$eval(callBackFunction, contextVars);
@@ -910,7 +986,7 @@ angular.module('datasourcejs', [])
       }
     };
 
-    this.sendODataFiles = function(obj) {
+    this.sendODataFiles = function(obj, callback) {
       if (obj && this.odataFile && this.odataFile.length > 0) {
 
         var url = this.entity;
@@ -945,7 +1021,11 @@ angular.module('datasourcejs', [])
               service.call(url + '/' +  of.field, 'GET', {}, false).$promise.error(function(errorMsg) {
                 Notification.error('Error send file');
               }).then(function(data, resultBool) {
-                obj[of.field] = data[of.field];
+                if (callback) {
+                  callback({ field: of.field, data: data });
+                } else {
+                  obj[of.field] = data[of.field];
+                }
               });
             }
           };
@@ -1000,10 +1080,6 @@ angular.module('datasourcejs', [])
             obj.__$id = this.active.__$id;
           }
 
-          this.sendODataFiles(obj);
-
-          this.data.push(obj);
-
           var func = function() {
             // The new object is now the active
             this.active = obj;
@@ -1017,7 +1093,7 @@ angular.module('datasourcejs', [])
 
             if (this.events.create && hotData) {
               this.callDataSourceEvents('create', this.active);
-              delete this.active.__sender;
+              delete _self.active.__sender;
             }
 
             if (this.events.memorycreate && !hotData) {
@@ -1025,13 +1101,27 @@ angular.module('datasourcejs', [])
             }
           }.bind(this);
 
-          if (this.dependentData && !this.dependentLazyPost && !this.batchPost) {
-            this.flushDependencies(func);
+          var proceed = function () {
+            this.data.push(obj);
+
+            if (this.dependentData && !this.dependentLazyPost && !this.batchPost) {
+              this.flushDependencies(func);
+            } else {
+              func();
+            }
+          }.bind(this);
+
+          if (this.odataFile && this.odataFile.length > 0) {
+            this.sendODataFiles(obj, function (result) {
+              obj[result.field] = result.data[result.field];
+
+              proceed();
+            });
           } else {
-            func();
+            this.sendODataFiles(obj);
+
+            proceed();
           }
-
-
         }.bind(this), onError);
 
       } else if (this.editing) {
@@ -1202,7 +1292,7 @@ angular.module('datasourcejs', [])
         var url = this.getEditionURL(this.active);
         var keyObj = this.getKeyValues(this.active);
 
-        this.$promise = $http({
+        this.$promise = this.getService("GET")({
           method: "GET",
           url: url,
           headers: this.headers
@@ -1403,8 +1493,17 @@ angular.module('datasourcejs', [])
 
 
     this.retrieveDefaultValues = function(obj, callback) {
-      if (obj) {
-        this.active = obj;
+      if (this.isEventData()) {
+        this.$scope.safeApply(function() {
+
+          this.active = {};
+          this.updateWithParams();
+          if (callback) {
+            callback();
+          }
+        }.bind(this))
+      } else if (obj) {
+        this.active = obj||{};
         this.updateWithParams();
         if (callback) {
           callback();
@@ -1416,7 +1515,7 @@ angular.module('datasourcejs', [])
           url += (this.entity.endsWith('/')) ? '__new__' : '/__new__';
           this.$promise = $http({
             method: "GET",
-            url: this.removeSlash(url),
+            url: this.removeSlash((window.hostApp || "") + url),
             headers: this.headers
           }).success(function (data, status, headers, config) {
             if (this.isOData()) {
@@ -1664,6 +1763,23 @@ angular.module('datasourcejs', [])
       }
 
       return keyValues;
+    }.bind(this);
+
+    this.getFirstKeyValue = function(rowData, forceOriginalKeys) {
+      var keys = this.keys;
+
+      var keyValues = {};
+      for (var i = 0; i < this.keys.length; i++) {
+        var key = this.keys[i];
+        var rowKey = null;
+        try {
+          rowKey = eval("rowData."+key);
+        } catch(e){
+          //
+        }
+        return rowKey;
+      }
+
     }.bind(this);
 
     /**
@@ -2037,6 +2153,10 @@ angular.module('datasourcejs', [])
       return this.entity.indexOf('odata') > 0;
     }
 
+    this.isEventData = function() {
+      return this.onGET !== undefined && this.onGET !== null && this.onGET !== '';
+    }
+
     this.normalizeValue = function(value, unquote) {
       if (unquote == null || unquote == undefined) {
         unquote = false;
@@ -2394,7 +2514,7 @@ angular.module('datasourcejs', [])
       return filter;
     }.bind(this);
 
-    var getOperatorODATA = function(operator) {
+    var getQueryOperator = function(operator) {
       if (operator == '=') {
         return ' eq ';
       } else if (operator == '!=') {
@@ -2433,7 +2553,11 @@ angular.module('datasourcejs', [])
       return result;
     }.bind(this);
 
-    this.parserOdata = function (data, strategy, resultData) {
+    this.isEmpty = function(value) {
+      return value === '' || value === undefined || value === null || value === '\'\'' || value === 'null';
+    }
+
+    this.parserCondition = function (data, strategy, resultData) {
       var result = '';
       var operation = data.type;
 
@@ -2448,15 +2572,15 @@ angular.module('datasourcejs', [])
 
           if (arg.args && arg.args.length > 0) {
 
-            var value = this.parserOdata(arg, strategy)
+            var value = this.parserCondition(arg, strategy)
 
-            if ((value == '\'\'' || value == 'null' || value == '') && (strategy == 'ignore' || strategy == 'clean')) {
+            if (this.isEmpty(value) && (strategy == 'ignore' || strategy == 'clean')) {
               if (resultData) {
                 resultData.clean = (strategy == 'clean');
               }
             } else {
 
-              if (value != '' && value != undefined && value != null) {
+              if (!this.isEmpty(value)) {
                 if (result != '') {
                   result += ' ' + oper.toLowerCase() + ' ';
                 }
@@ -2467,12 +2591,12 @@ angular.module('datasourcejs', [])
           } else {
             var value = executeRight(arg.right);
 
-            if ((value == '\'\'' || value == 'null' || value == '') && (strategy == 'ignore' || strategy == 'clean')) {
+            if (this.isEmpty(value) && (strategy == 'ignore' || strategy == 'clean')) {
               if (resultData) {
                 resultData.clean = (strategy == 'clean');
               }
             } else {
-              if (value != '' && value != undefined && value != null) {
+              if (!this.isEmpty(value)) {
                 if (result != '') {
                   result += ' ' + oper.toLowerCase() + ' ';
                 }
@@ -2480,7 +2604,7 @@ angular.module('datasourcejs', [])
                 if (arg.type == '%') {
                   result += "substringof("+value.toLowerCase()+", tolower("+arg.left+"))";
                 } else {
-                  result += arg.left + getOperatorODATA(arg.type) + value;
+                  result += arg.left + getQueryOperator(arg.type) + value;
                 }
               }
             }
@@ -2722,7 +2846,7 @@ angular.module('datasourcejs', [])
             var filterClause;
 
             var g = DEP_PATTERN.exec(binaryExpression[1]);
-            if ((!binary[1] || binary[1] == "''") && this.dependentLazyPost && g[1] && g[1].startsWith(this.dependentLazyPost+".")) {
+            if (this.isEmpty(binary[1]) && this.dependentLazyPost && g[1] && g[1].startsWith(this.dependentLazyPost+".")) {
               if (this.parametersNullStrategy == "clean" || this.parametersNullStrategy == "default") {
                 cleanData = true;
                 var dds = eval(this.dependentLazyPost);
@@ -2733,7 +2857,7 @@ angular.module('datasourcejs', [])
                 }
               }
             } else {
-              if (!binary[1] || binary[1] == "''") {
+              if (this.isEmpty(binary[1])) {
                 if (this.parametersNullStrategy == "clean" || this.parametersNullStrategy == "default") {
                   filterClause = 'null';
                   cleanData = true;
@@ -2744,7 +2868,7 @@ angular.module('datasourcejs', [])
             }
 
             if (filterClause) {
-              filterClause = binary[0] + (this.isOData()?" eq ":"=") + filterClause;
+              filterClause = binary[0] + getQueryOperator("=") + filterClause;
 
               if (filter != "") {
                 filter += this.isOData()?" and ":";";
@@ -2779,9 +2903,9 @@ angular.module('datasourcejs', [])
           if (typeof obj === 'object') {
             var resultData = {};
             if (obj.expression) {
-              this.conditionOdata = this.parserOdata(obj.expression, this.parametersNullStrategy, resultData);
+              this.conditionOdata = this.parserCondition(obj.expression, this.parametersNullStrategy, resultData);
             } else {
-              this.conditionOdata = this.parserOdata(obj, this.parametersNullStrategy, resultData);
+              this.conditionOdata = this.parserCondition(obj, this.parametersNullStrategy, resultData);
             }
 
             if (!cleanData && resultData.clean) {
@@ -2792,11 +2916,13 @@ angular.module('datasourcejs', [])
               for (var i=0;i<obj.params.length;i++) {
                 var value = obj.params[i].fieldValue;
 
-                if (value.length > 2 && value.charAt(0) == "'" && value.charAt(value.length-1) == "'") {
+                if (value.length >= 2 && value.charAt(0) == "'" && value.charAt(value.length-1) == "'") {
                   value = value.substring(1, value.length-1);
                 }
 
-                props.params[obj.params[i].fieldName] = value;
+                if (value !== '' && value !== undefined && value !== null) {
+                  props.params[obj.params[i].fieldName] = value;
+                }
               }
             }
           } else {
@@ -2969,18 +3095,23 @@ angular.module('datasourcejs', [])
       this.busy = true;
 
       // Get an ajax promise
-      this.$promise = $http({
+      this.$promise = this.getService("GET")({
         method: "GET",
         url: this.removeSlash(resourceURL),
         params: props.params,
-        headers: this.headers
+        headers: this.headers,
+        filter: filter
       }).success(function(data, status, headers, config) {
         if (localSuccess) {
           localSuccess();
         }
         this.lastFilter = filter;
         this.busy = false;
-        sucessHandler(data, headers())
+        if (headers) {
+          sucessHandler(data, headers());
+        } else {
+          sucessHandler(data, null);
+        }
       }.bind(this)).error(function(data, status, headers, config) {
         this.busy = false;
         this.handleError(data);
@@ -3203,6 +3334,9 @@ angular.module('datasourcejs', [])
 
         if (window.dataSourceMap && window.dataSourceMap[dts.entity]) {
           dts.entity = window.dataSourceMap[dts.entity].serviceUrlODATA || window.dataSourceMap[dts.entity].serviceUrl;
+          if(dts.entity.charAt(0) === "/"){
+            dts.entity = dts.entity.substr(1);
+          }
         }
 
         if (app && app.config && app.config.datasourceApiVersion) {
@@ -3229,6 +3363,10 @@ angular.module('datasourcejs', [])
         dts.onAfterUpdate = props.onAfterUpdate;
         dts.onBeforeDelete = props.onBeforeDelete;
         dts.onAfterDelete = props.onAfterDelete;
+        dts.onGET = props.onGet,
+        dts.onPOST = props.onPost,
+        dts.onPUT = props.onPut,
+        dts.onDELETE = props.onDelete,
         dts.dependentBy = props.dependentBy;
         dts.parameters = props.parameters;
         dts.parametersNullStrategy = props.parametersNullStrategy;
@@ -3373,6 +3511,10 @@ angular.module('datasourcejs', [])
           onAfterUpdate: attrs.onAfterUpdate,
           onBeforeDelete: attrs.onBeforeDelete,
           onAfterDelete: attrs.onAfterDelete,
+          onGet: attrs.onGet,
+          onPost: attrs.onPost,
+          onPut: attrs.onPut,
+          onDelete: attrs.onDelete,
           defaultNotSpecifiedErrorMessage: $translate.instant('General.ErrorNotSpecified'),
           dependentBy: attrs.dependentBy,
           dependentLazyPost: attrs.dependentLazyPost,
@@ -3559,7 +3701,10 @@ angular.module('datasourcejs', [])
           datasource.entity = value;
 
           if (window.dataSourceMap && window.dataSourceMap[datasource.entity]) {
-            datasource.entity = window.dataSourceMap[datasource.entity].serviceUrlODATA || window.dataSourceMap[datasource.entity].serviceUrl;;
+            datasource.entity = window.dataSourceMap[datasource.entity].serviceUrlODATA || window.dataSourceMap[datasource.entity].serviceUrl;
+            if(datasource.entity.charAt(0) === "/"){
+              datasource.entity = datasource.entity.substr(1);
+            }
           }
 
           if (!firstLoad.entity) {

@@ -2754,6 +2754,11 @@
           "name": "on-tap",
           "selector": "input",
           "type": "event"
+        },
+		{
+          "name":"ng-change",
+          "selector": "input",
+          "type": "event"
         }
       ],
       "styles": [
@@ -2978,6 +2983,11 @@
           "name": "type",
           "selector": "input[type]",
           "type":"inputType"
+        },
+		{
+          "name": "ng-keydown",
+          "selector": "input",
+          "type": "event"
         },
         {
           "name": "ng-keydown",
@@ -4710,9 +4720,10 @@
       },
       "handleRules": {
         "canIncrement": true,
+        "designTimeRules": true,
         "rules": [
           {
-            "sourceHTML": "<ion-tab title=\"Title\" icon-on=\"ion-ios-filing\" icon-off=\"ion-ios-filing-outline\" id=\"ion-tab-${RANDOM}\" data-component=\"crn-ion-tab-item\" href=\"\" ></ion-tab>",
+            "sourceHTML": "<ion-tab title=\"Title\" icon-on=\"ion-ios-filing\" icon-off=\"ion-ios-filing-outline\" id=\"ion-tab-${RANDOM}\" data-component=\"crn-ion-tab-item\" href=\"\" badge= \"0\"></ion-tab>",
             "targetSelector": ":self"
           }
         ]
@@ -4799,7 +4810,7 @@
       "pallete": false,
       "designTimeHTMLURL": "src/main/mobileapp/www/plugins/cronapp-framework-mobile-js/components/templates/ion-tab-item.designtime.html",
       "designTimeSelector": ":self",
-      "template": "<ion-tab title=\"\" icon-on=\"ion-ios-filing\" icon-off=\"ion-ios-filing-outline\" id=\"ion-tab-${RANDOM}\" href=\"\" ></ion-tab>",
+      "template": "<ion-tab title=\"\" icon-on=\"ion-ios-filing\" icon-off=\"ion-ios-filing-outline\" id=\"ion-tab-${RANDOM}\" href=\"\" badge=\"\"></ion-tab>",
       "properties": {
         "icon-on":{
           "displayName_pt_BR": "Ícone ativo",
@@ -5304,6 +5315,16 @@
           "onDisplay": "javascript:function() { return arguments[0].replace('vars.',''); }"
         }
       ]
+    },
+    {
+      "name": "crn-start",
+      "pallete": false,
+      "wrapper": false,
+      "properties": {
+        "screen-params": {
+          "removable": false
+        }
+      }
     }
   ]
 }
